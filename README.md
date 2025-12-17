@@ -1,57 +1,43 @@
-# AskTony API (Node.js + TypeScript)
+# AskTony API
 
-Lean, modular REST API built with Express, pg, and Zod.
+Lean Node.js + TypeScript REST API with Express, Postgres (pg), Zod validation, and Vitest tests.
 
-## Requirements
+## Stack
+- Express, Zod, pg (no ORM)
+- JWT auth (jsonwebtoken), bcrypt
+- ESLint + Prettier, Vitest
+- Cursor pagination helpers
 
-- Node.js 20+
-- Postgres 14+
-
-## Setup
-
+## Quick start
 ```bash
 npm install
-cp .env.example .env   # fill in values
-npm run migrate        # run SQL migrations
-npm run dev            # start in watch mode
+cp .env.example .env   # set values
+npm run migrate        # apply SQL migrations
+npm run dev            # start http://localhost:3000
 ```
 
-## Environment
-
-`src/config/env.ts` validates variables with Zod.
-
-- `DATABASE_URL` - Postgres connection string
-- `JWT_SECRET` - at least 32 chars
-- `BCRYPT_ROUNDS` - integer (default 10)
-- `PORT` - default 3000
-- `NODE_ENV` - development | test | production
+## Environment (Zod-validated)
+- `DATABASE_URL` Postgres connection string
+- `JWT_SECRET` min 32 chars
+- `BCRYPT_ROUNDS` default 10
+- `PORT` default 3000
+- `NODE_ENV` development | test | production
 
 ## Scripts
-
-- `npm run dev` - start server with tsx watch
-- `npm run build` - compile to `dist/`
-- `npm run start` - run compiled server
-- `npm run migrate` - apply SQL migrations
+- `npm run dev`  start in watch mode
+- `npm run build` compile to `dist/`
+- `npm start`    run compiled server
+- `npm run migrate` apply SQL in `src/db/migrations`
 - `npm run lint` / `npm run lint:fix`
 - `npm run format` / `npm run format:fix`
-- `npm test` - run Vitest suite
+- `npm test`     run Vitest
 
-## Migrations
-
-Migrations live in `src/db/migrations`. The runner reads and executes them in order:
-
-```bash
-npm run migrate
-```
-
-## Tests
-
+## Testing
 ```bash
 npm test
 ```
 
-## Example cURL
-
+## Sample API calls
 ```bash
 # Signup
 curl -X POST http://localhost:3000/v1/auth/signup \
