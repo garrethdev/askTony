@@ -3,8 +3,8 @@ import { RouteDeps } from './context';
 import { asyncHandler } from './helpers';
 import { requireUser } from '../middleware/auth';
 import { fetchProfile, saveProfile } from '../../services/profile';
-import { updateProfileSchema } from '../validators/profile';
 import { notFound } from '../../domain/errors';
+import { profileResponse, profileUpdateRequest } from '../contracts/v1/profile';
 
 /**
  * Build profile routes.
@@ -19,23 +19,27 @@ export const profileRoutes = (deps: RouteDeps): Router => {
   const handleGetProfile: RequestHandler = async (req, res) => {
     const profile = await fetchProfile({ db: deps.db }, req.user!.userId);
     if (!profile) throw notFound('Profile not found');
-    res.json(profile);
+    res.json(profileResponse.parse(profile));
   };
 
   /**
    * Update profile fields.
    */
   const handleUpdateProfile: RequestHandler = async (req, res) => {
-    const input = updateProfileSchema.parse(req.body);
+    const input = profileUpdateRequest.parse(req.body);
+    const current = await fetchProfile({ db: deps.db }, req.user!.userId);
+    if (!current) throw notFound('Profile not found');
     const profile = await saveProfile(
       { db: deps.db },
       {
         userId: req.user!.userId,
-        name: input.name,
-        avatarUrl: input.avatarUrl
+        nickname: input.nickname ?? current.nickname,
+        username: input.username ?? current.username,
+        avatarId: input.avatar_id ?? current.avatarId,
+        timezone: input.timezone ?? current.timezone
       }
     );
-    res.json(profile);
+    res.json(profileResponse.parse(profile));
   };
 
   router.get('/profile', requireUser(), asyncHandler(handleGetProfile));

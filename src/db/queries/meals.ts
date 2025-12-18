@@ -1,26 +1,38 @@
 import { DbClient, query } from '../pool';
-import { Meal, MealId, ScanId, UserId } from '../../domain/types';
+import { Meal, MealId, UserId } from '../../domain/types';
 
 interface MealRow {
   id: string;
   user_id: string;
-  scan_id: string | null;
-  description: string;
-  tags: string[];
-  score: number;
-  consumed_at: string;
+  cohort_id: string;
+  meal_scan_id: string | null;
+  meal_name: string;
+  meal_description: string | null;
+  meal_type: string | null;
+  eaten_at: string;
+  energy_level: string | null;
+  metabolic_score: string;
+  tag_keys: string[];
+  explanation_short: string;
   created_at: string;
+  updated_at: string;
 }
 
 const mapMeal = (row: MealRow): Meal => ({
   id: row.id,
   userId: row.user_id,
-  scanId: row.scan_id ?? undefined,
-  description: row.description,
-  tags: row.tags ?? [],
-  score: row.score,
-  consumedAt: new Date(row.consumed_at),
-  createdAt: new Date(row.created_at)
+  cohortId: row.cohort_id,
+  mealScanId: row.meal_scan_id ?? undefined,
+  mealName: row.meal_name,
+  mealDescription: row.meal_description ?? undefined,
+  mealType: row.meal_type ? (row.meal_type as Meal['mealType']) : undefined,
+  eatenAt: new Date(row.eaten_at),
+  energyLevel: row.energy_level ? (row.energy_level as Meal['energyLevel']) : undefined,
+  metabolicScore: Number(row.metabolic_score),
+  tagKeys: row.tag_keys ?? [],
+  explanationShort: row.explanation_short,
+  createdAt: new Date(row.created_at),
+  updatedAt: new Date(row.updated_at)
 });
 
 /**
@@ -30,21 +42,29 @@ const mapMeal = (row: MealRow): Meal => ({
  */
 export const insertMeal = async (
   db: DbClient,
-  meal: Omit<Meal, 'createdAt'>
+  meal: Omit<Meal, 'createdAt' | 'updatedAt'>
 ): Promise<Meal> => {
   const result = await query<MealRow>(
     db,
-    `INSERT INTO meals (id, user_id, scan_id, description, tags, score, consumed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO meals (
+      id, user_id, cohort_id, meal_scan_id, meal_name, meal_description, meal_type,
+      eaten_at, energy_level, metabolic_score, tag_keys, explanation_short
+    )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING *`,
     [
       meal.id,
       meal.userId,
-      meal.scanId ?? null,
-      meal.description,
-      meal.tags,
-      meal.score,
-      meal.consumedAt.toISOString()
+      meal.cohortId,
+      meal.mealScanId ?? null,
+      meal.mealName,
+      meal.mealDescription ?? null,
+      meal.mealType ?? null,
+      meal.eatenAt.toISOString(),
+      meal.energyLevel ?? null,
+      meal.metabolicScore,
+      meal.tagKeys,
+      meal.explanationShort
     ]
   );
   return mapMeal(result.rows[0]);
@@ -92,11 +112,11 @@ export const listMeals = async (
   const values: unknown[] = [userId, limit, ...params];
   let idx = values.length + 1;
   if (date) {
-    conditions.push(`DATE(consumed_at) = $${idx++}`);
+    conditions.push(`DATE(eaten_at) = $${idx++}`);
     values.push(date);
   }
   if (search) {
-    conditions.push(`description ILIKE $${idx++}`);
+    conditions.push(`meal_name ILIKE $${idx++}`);
     values.push(`%${search}%`);
   }
   const result = await query<MealRow>(

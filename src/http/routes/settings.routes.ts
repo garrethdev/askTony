@@ -3,7 +3,7 @@ import { RouteDeps } from './context';
 import { asyncHandler } from './helpers';
 import { requireUser } from '../middleware/auth';
 import { fetchSettings, saveSettings } from '../../services/profile';
-import { settingsSchema } from '../validators/settings';
+import { settingsResponse, settingsUpdateRequest } from '../contracts/v1/settings';
 
 /**
  * Build settings routes.
@@ -17,23 +17,42 @@ export const settingsRoutes = (deps: RouteDeps): Router => {
    */
   const handleGetSettings: RequestHandler = async (req, res) => {
     const settings = await fetchSettings({ db: deps.db }, req.user!.userId);
-    res.json(settings ?? { remindersEnabled: false });
+    const payload =
+      settings ??
+      ({
+        userId: req.user!.userId,
+        remindersEnabledMeals: false,
+        remindersEnabledBodyCheckin: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as any);
+    res.json(
+      settingsResponse.parse({
+        reminders_enabled_meals: payload.remindersEnabledMeals,
+        reminders_enabled_body_checkin: payload.remindersEnabledBodyCheckin
+      })
+    );
   };
 
   /**
    * Update reminder settings.
    */
   const handleUpdateReminders: RequestHandler = async (req, res) => {
-    const input = settingsSchema.parse(req.body);
+    const input = settingsUpdateRequest.parse(req.body);
     const updated = await saveSettings(
       { db: deps.db },
       {
         userId: req.user!.userId,
-        remindersEnabled: input.remindersEnabled,
-        reminderTime: input.reminderTime
+        remindersEnabledMeals: input.reminders_enabled_meals ?? false,
+        remindersEnabledBodyCheckin: input.reminders_enabled_body_checkin ?? false
       }
     );
-    res.json(updated);
+    res.json(
+      settingsResponse.parse({
+        reminders_enabled_meals: updated.remindersEnabledMeals,
+        reminders_enabled_body_checkin: updated.remindersEnabledBodyCheckin
+      })
+    );
   };
 
   router.get('/settings', requireUser(), asyncHandler(handleGetSettings));

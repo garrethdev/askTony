@@ -7,6 +7,7 @@ import { getScan } from '../../db/queries/scans';
 import { badRequest, notFound } from '../../domain/errors';
 import { scoreManualMeal } from '../scoring';
 import { decodeCursor, encodeCursor } from '../../utils/pagination';
+import { getCurrentCohort } from '../cohorts';
 
 export interface MealDeps {
   db: DbClient;
@@ -34,21 +35,33 @@ export const createMealFromScan = async (
   deps: MealDeps,
   userId: UserId,
   scanId: ScanId,
-  description: string
+  mealName: string,
+  mealType?: Meal['mealType'],
+  eatenAt?: string,
+  energyLevel?: Meal['energyLevel']
 ): Promise<Meal> => {
   const scan = await getScan(deps.db, scanId, userId);
-  if (!scan) {
-    throw notFound('Scan not found');
-  }
-  const scored = scoreManualMeal({ description });
+  if (!scan) throw notFound('Scan not found');
+  const cohort = await getCurrentCohort({ db: deps.db }, userId);
+  if (!cohort) throw badRequest('No cohort');
+  const scored = {
+    metabolic_score: scan.metabolicScore ?? 5,
+    tag_keys: scan.tagKeys ?? [],
+    explanation_short: scan.explanationShort ?? 'Scored from scan'
+  };
   return insertMeal(deps.db, {
     id: deps.idGen.newId(),
     userId,
-    scanId,
-    description,
-    tags: scored.tags,
-    score: scored.score,
-    consumedAt: deps.clock.now()
+    cohortId: cohort.id,
+    mealScanId: scanId,
+    mealName,
+    mealDescription: undefined,
+    mealType,
+    eatenAt: eatenAt ? new Date(eatenAt) : deps.clock.now(),
+    energyLevel,
+    metabolicScore: scored.metabolic_score,
+    tagKeys: scored.tag_keys,
+    explanationShort: scored.explanation_short
   });
 };
 
@@ -62,17 +75,34 @@ export const createMealFromScan = async (
 export const createManualMeal = async (
   deps: MealDeps,
   userId: UserId,
-  description: string,
-  tags: string[] = []
+  mealName: string,
+  mealDescription?: string,
+  mealType?: Meal['mealType'],
+  eatenAt?: string,
+  energyLevel?: Meal['energyLevel']
 ): Promise<Meal> => {
-  const scored = scoreManualMeal({ description, tags });
+  const cohort = await getCurrentCohort({ db: deps.db }, userId);
+  if (!cohort) throw badRequest('No cohort');
+  const scored = scoreManualMeal({
+    meal_name: mealName,
+    meal_description: mealDescription,
+    meal_type: mealType,
+    energy_level: energyLevel,
+    eaten_at: eatenAt
+  });
   return insertMeal(deps.db, {
     id: deps.idGen.newId(),
     userId,
-    description,
-    tags: scored.tags,
-    score: scored.score,
-    consumedAt: deps.clock.now()
+    cohortId: cohort.id,
+    mealScanId: undefined,
+    mealName,
+    mealDescription,
+    mealType,
+    eatenAt: eatenAt ? new Date(eatenAt) : deps.clock.now(),
+    energyLevel,
+    metabolicScore: scored.metabolic_score,
+    tagKeys: scored.tag_keys,
+    explanationShort: scored.explanation_short
   });
 };
 
@@ -113,7 +143,13 @@ export const listUserMeals = async (
 ): Promise<{ items: Meal[]; nextCursor?: string }> => {
   const { clause, params } = cursorClause(cursor);
   const meals = await listMeals(deps.db, userId, limit, clause, params, date, search);
-  const next = meals.length === limit ? encodeCursor({ createdAt: meals[meals.length - 1].createdAt.toISOString(), id: meals[meals.length - 1].id }) : undefined;
+  const next =
+    meals.length === limit
+      ? encodeCursor({
+          createdAt: meals[meals.length - 1].createdAt.toISOString(),
+          id: meals[meals.length - 1].id
+        })
+      : undefined;
   return { items: meals, nextCursor: next };
 };
 

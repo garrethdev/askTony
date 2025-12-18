@@ -2,7 +2,7 @@ import { DbClient } from '../../db/pool';
 import { Clock } from '../../domain/time';
 import { IdGenerator } from '../../domain/ids';
 import { MealScan, ScanId, UserId } from '../../domain/types';
-import { insertScan, getScan, listScans } from '../../db/queries/scans';
+import { insertScan, getScan, listScans, updateScan, deleteScan } from '../../db/queries/scans';
 import { decodeCursor, encodeCursor } from '../../utils/pagination';
 import { notFound } from '../../domain/errors';
 import { scoreManualMeal } from '../scoring';
@@ -28,12 +28,14 @@ const cursorClause = (cursor?: string): { clause: string; params: unknown[] } =>
 export const createScan = async (
   deps: ScanDeps,
   userId: UserId,
-  label: string
+  cohortId: string
 ): Promise<MealScan> =>
   insertScan(deps.db, {
     id: deps.idGen.newId(),
     userId,
-    label
+    cohortId,
+    status: 'uploaded',
+    imageStorageKey: ''
   });
 
 /**
@@ -81,9 +83,9 @@ export const listUserScans = async (
  * Produce a placeholder upload URL response.
  * @param scanId - Scan identifier.
  */
-export const presignUpload = (scanId: ScanId): { url: string; fields: Record<string, string> } => ({
-  url: `https://upload.mock/${scanId}`,
-  fields: { key: scanId }
+export const presignUpload = (scanId: ScanId, mimeType: string): { upload_url: string; storage_key: string } => ({
+  upload_url: `https://upload.mock/${scanId}`,
+  storage_key: `${scanId}-${mimeType}`
 });
 
 /**
@@ -96,8 +98,23 @@ export const analyzeScan = async (
   deps: ScanDeps,
   scanId: ScanId,
   userId: UserId
-): Promise<{ score: number; tags: string[]; explanation: string }> => {
+): Promise<{ scan_id: string; status: 'analyzing' }> => {
   const scan = await getScanById(deps, scanId, userId);
-  return scoreManualMeal({ description: scan.label });
+  await updateScan(deps.db, scanId, userId, { status: 'analyzing' });
+  // deterministic stub scoring using image_storage_key as text
+  const scored = scoreManualMeal({ meal_name: scan.imageStorageKey || 'scan' });
+  await updateScan(deps.db, scanId, userId, {
+    status: 'ready',
+    metabolic_score: scored.metabolic_score,
+    tag_keys: scored.tag_keys,
+    explanation_short: scored.explanation_short
+  });
+  return { scan_id: scanId, status: 'analyzing' };
 };
+
+export const removeScan = async (
+  deps: ScanDeps,
+  userId: UserId,
+  scanId: ScanId
+): Promise<void> => deleteScan(deps.db, scanId, userId);
 

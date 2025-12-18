@@ -8,8 +8,7 @@ import {
   listWeightEntries,
   upsertWeightGoal
 } from '../../db/queries/weight';
-import { WeightEntry, WeightEntryId, WeightGoal, UserId } from '../../domain/types';
-import { notFound } from '../../domain/errors';
+import { WeightEntry, WeightGoal, UserId } from '../../domain/types';
 
 export interface WeightDeps {
   db: DbClient;
@@ -27,9 +26,8 @@ export interface WeightDeps {
 export const saveWeightGoal = async (
   deps: WeightDeps,
   userId: UserId,
-  targetWeight: number,
-  unit: WeightGoal['unit']
-): Promise<WeightGoal> => upsertWeightGoal(deps.db, { userId, targetWeight, unit });
+  goalWeightKg: number
+): Promise<WeightGoal> => upsertWeightGoal(deps.db, { userId, goalWeightKg });
 
 /**
  * Get current weight goal.
@@ -52,16 +50,14 @@ export const fetchWeightGoal = async (
 export const addWeightEntry = async (
   deps: WeightDeps,
   userId: UserId,
-  weight: number,
-  unit: WeightEntry['unit'],
-  recordedAt: string
+  weightKg: number,
+  measuredAt: string
 ): Promise<WeightEntry> =>
   insertWeightEntry(deps.db, {
-    id: deps.idGen.newId(),
     userId,
-    weight,
-    unit,
-    recordedAt: new Date(recordedAt)
+    weightKg,
+    measuredAt,
+    createdAt: new Date()
   });
 
 /**
@@ -87,6 +83,6 @@ export const listEntries = async (
 export const removeEntry = async (
   deps: WeightDeps,
   userId: UserId,
-  entryId: WeightEntryId
-): Promise<void> => deleteWeightEntry(deps.db, entryId, userId);
+  measuredAt: string
+): Promise<void> => deleteWeightEntry(deps.db, userId, measuredAt);
 

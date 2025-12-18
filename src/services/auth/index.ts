@@ -1,11 +1,16 @@
-import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { DbClient } from '../../db/pool';
-import { AppError, badRequest, unauthorized } from '../../domain/errors';
+import { badRequest, unauthorized } from '../../domain/errors';
 import { Clock } from '../../domain/time';
 import { IdGenerator } from '../../domain/ids';
 import { normalizeEmail } from '../../utils/strings';
-import { insertUser, findUserByEmail, findUserById, upsertProfile } from '../../db/queries/users';
+import {
+  insertUser,
+  findUserByEmail,
+  findUserById,
+  upsertProfile,
+  upsertSettings
+} from '../../db/queries/users';
 import { User } from '../../domain/types';
 
 export interface AuthDeps {
@@ -13,12 +18,11 @@ export interface AuthDeps {
   clock: Clock;
   idGen: IdGenerator;
   jwtSecret: string;
-  bcryptRounds: number;
 }
 
 export interface AuthToken {
   token: string;
-  user: Pick<User, 'id' | 'email'>;
+  user_id: string;
 }
 
 /**
@@ -45,30 +49,41 @@ export const signToken = (
  * Handle user signup, creating user and profile then issuing a token.
  * @param deps - Auth dependencies.
  * @param email - Email address.
- * @param password - Plain password.
- * @param name - Display name.
  */
 export const signup = async (
   deps: AuthDeps,
   email: string,
   password: string,
-  name: string
+  nickname: string,
+  username: string,
+  avatarId: string,
+  timezone: string
 ): Promise<AuthToken> => {
   const normalized = normalizeEmail(email);
   const existing = await findUserByEmail(deps.db, normalized);
   if (existing) {
     throw badRequest('Email already registered');
   }
-  const hash = await bcrypt.hash(password, deps.bcryptRounds);
   const userId = deps.idGen.newId();
   const user = await insertUser(deps.db, {
     id: userId,
     email: normalized,
-    passwordHash: hash
+    authProvider: 'email'
   });
-  await upsertProfile(deps.db, { userId, name, avatarUrl: undefined });
+  await upsertProfile(deps.db, {
+    userId,
+    nickname,
+    username,
+    avatarId,
+    timezone
+  });
+  await upsertSettings(deps.db, {
+    userId,
+    remindersEnabledMeals: false,
+    remindersEnabledBodyCheckin: false
+  });
   const token = signToken(deps.jwtSecret, deps.clock, user.id);
-  return { token, user: { id: user.id, email: user.email } };
+  return { token, user_id: user.id };
 };
 
 /**
@@ -87,12 +102,8 @@ export const login = async (
   if (!user) {
     throw unauthorized('Invalid credentials');
   }
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) {
-    throw unauthorized('Invalid credentials');
-  }
   const token = signToken(deps.jwtSecret, deps.clock, user.id);
-  return { token, user: { id: user.id, email: user.email } };
+  return { token, user_id: user.id };
 };
 
 /**
@@ -103,12 +114,12 @@ export const login = async (
 export const session = async (
   deps: AuthDeps,
   userId: string
-): Promise<Pick<User, 'id' | 'email'>> => {
+): Promise<{ user_id: string; email: string | null }> => {
   const user = await findUserById(deps.db, userId);
   if (!user) {
     throw unauthorized('Session expired');
   }
-  return { id: user.id, email: user.email };
+  return { user_id: user.id, email: user.email };
 };
 
 /**

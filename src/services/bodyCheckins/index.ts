@@ -19,12 +19,12 @@ export const saveBodyCheckin = async (
   deps: BodyCheckinDeps,
   userId: UserId,
   date: string,
-  notes?: string
+  energyLevel: BodyCheckin['energyLevel']
 ): Promise<BodyCheckin> =>
   upsertBodyCheckin(deps.db, {
     userId,
     date,
-    notes
+    energyLevel
   });
 
 /**

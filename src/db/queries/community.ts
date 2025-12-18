@@ -1,22 +1,19 @@
 import { DbClient, query } from '../pool';
-import {
-  Meal,
-  Reflection,
-  ReflectionId,
-  UserId,
-  Reaction
-} from '../../domain/types';
+import { Meal, Reflection, ReflectionId, UserId, Reaction, CohortId } from '../../domain/types';
 
 interface ReflectionRow {
   id: string;
   user_id: string;
-  week_start: string;
+  cohort_id: string;
   body: string;
   created_at: string;
+  updated_at: string;
 }
 
 interface ReactionRow {
-  user_id: string;
+  id: string;
+  cohort_id: string;
+  actor_user_id: string;
   target_type: 'meal' | 'reflection';
   target_id: string;
   created_at: string;
@@ -25,13 +22,16 @@ interface ReactionRow {
 const mapReflection = (row: ReflectionRow): Reflection => ({
   id: row.id,
   userId: row.user_id,
-  weekStart: row.week_start,
+  cohortId: row.cohort_id,
   body: row.body,
-  createdAt: new Date(row.created_at)
+  createdAt: new Date(row.created_at),
+  updatedAt: new Date(row.updated_at)
 });
 
 const mapReaction = (row: ReactionRow): Reaction => ({
-  userId: row.user_id,
+  id: row.id,
+  cohortId: row.cohort_id,
+  actorUserId: row.actor_user_id,
   targetType: row.target_type,
   targetId: row.target_id,
   createdAt: new Date(row.created_at)
@@ -44,14 +44,14 @@ const mapReaction = (row: ReactionRow): Reaction => ({
  */
 export const insertReflection = async (
   db: DbClient,
-  reflection: Omit<Reflection, 'createdAt'>
+  reflection: Omit<Reflection, 'createdAt' | 'updatedAt'>
 ): Promise<Reflection> => {
   const result = await query<ReflectionRow>(
     db,
-    `INSERT INTO reflections (id, user_id, week_start, body)
+    `INSERT INTO reflections (id, user_id, cohort_id, body)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
-    [reflection.id, reflection.userId, reflection.weekStart, reflection.body]
+    [reflection.id, reflection.userId, reflection.cohortId, reflection.body]
   );
   return mapReflection(result.rows[0]);
 };
@@ -66,7 +66,7 @@ export const insertReflection = async (
  */
 export const listReflections = async (
   db: DbClient,
-  weekStart: string,
+  cohortId: CohortId,
   limit: number,
   cursorClause: string,
   params: unknown[]
@@ -74,10 +74,10 @@ export const listReflections = async (
   const result = await query<ReflectionRow>(
     db,
     `SELECT * FROM reflections
-     WHERE week_start = $1 ${cursorClause}
+     WHERE cohort_id = $1 ${cursorClause}
      ORDER BY created_at DESC, id DESC
      LIMIT $2`,
-    [weekStart, limit, ...params]
+    [cohortId, limit, ...params]
   );
   return result.rows.map(mapReflection);
 };
@@ -109,7 +109,7 @@ export const deleteReflection = async (
  */
 export const listCommunityMeals = async (
   db: DbClient,
-  weekStart: string,
+  cohortId: CohortId,
   limit: number,
   cursorClause: string,
   params: unknown[]
@@ -117,21 +117,27 @@ export const listCommunityMeals = async (
   const result = await query(
     db,
     `SELECT * FROM meals
-     WHERE DATE_TRUNC('week', consumed_at) = DATE_TRUNC('week', $1::date)
+     WHERE cohort_id = $1
      ${cursorClause}
      ORDER BY created_at DESC, id DESC
      LIMIT $2`,
-    [weekStart, limit, ...params]
+    [cohortId, limit, ...params]
   );
   return (result.rows as any[]).map((row) => ({
     id: row.id,
     userId: row.user_id,
-    scanId: row.scan_id ?? undefined,
-    description: row.description,
-    tags: row.tags ?? [],
-    score: row.score,
-    consumedAt: new Date(row.consumed_at),
-    createdAt: new Date(row.created_at)
+    cohortId: row.cohort_id,
+    mealScanId: row.meal_scan_id ?? undefined,
+    mealName: row.meal_name,
+    mealDescription: row.meal_description ?? undefined,
+    mealType: row.meal_type ?? undefined,
+    eatenAt: new Date(row.eaten_at),
+    energyLevel: row.energy_level ?? undefined,
+    metabolicScore: Number(row.metabolic_score),
+    tagKeys: row.tag_keys ?? [],
+    explanationShort: row.explanation_short,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at)
   }));
 };
 
@@ -142,16 +148,16 @@ export const listCommunityMeals = async (
  */
 export const upsertReaction = async (
   db: DbClient,
-  reaction: Omit<Reaction, 'createdAt'>
+  reaction: Omit<Reaction, 'createdAt' | 'id'>
 ): Promise<Reaction> => {
   const result = await query<ReactionRow>(
     db,
-    `INSERT INTO reactions (user_id, target_type, target_id)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (user_id, target_type, target_id) DO UPDATE
+    `INSERT INTO reactions (cohort_id, actor_user_id, target_type, target_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (actor_user_id, target_type, target_id) DO UPDATE
        SET created_at = now()
      RETURNING *`,
-    [reaction.userId, reaction.targetType, reaction.targetId]
+    [reaction.cohortId, reaction.actorUserId, reaction.targetType, reaction.targetId]
   );
   return mapReaction(result.rows[0]);
 };
@@ -163,12 +169,12 @@ export const upsertReaction = async (
  */
 export const deleteReaction = async (
   db: DbClient,
-  reaction: Pick<Reaction, 'userId' | 'targetType' | 'targetId'>
+  reaction: Pick<Reaction, 'actorUserId' | 'targetType' | 'targetId'>
 ): Promise<void> => {
   await query(
     db,
-    `DELETE FROM reactions WHERE user_id = $1 AND target_type = $2 AND target_id = $3`,
-    [reaction.userId, reaction.targetType, reaction.targetId]
+    `DELETE FROM reactions WHERE actor_user_id = $1 AND target_type = $2 AND target_id = $3`,
+    [reaction.actorUserId, reaction.targetType, reaction.targetId]
   );
 };
 

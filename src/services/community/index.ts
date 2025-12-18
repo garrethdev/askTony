@@ -12,6 +12,8 @@ import { Clock } from '../../domain/time';
 import { Reaction, Reflection, ReflectionId, UserId } from '../../domain/types';
 import { decodeCursor, encodeCursor } from '../../utils/pagination';
 import { notFound } from '../../domain/errors';
+import { getCurrentCohort } from '../cohorts';
+import { query } from '../../db/pool';
 
 export interface CommunityDeps {
   db: DbClient;
@@ -35,15 +37,17 @@ const cursorClause = (cursor?: string): { clause: string; params: unknown[] } =>
 export const createReflection = async (
   deps: CommunityDeps,
   userId: UserId,
-  weekStart: string,
   body: string
-): Promise<Reflection> =>
-  insertReflection(deps.db, {
+): Promise<Reflection> => {
+  const cohort = await getCurrentCohort({ db: deps.db }, userId);
+  if (!cohort) throw notFound('No cohort');
+  return insertReflection(deps.db, {
     id: deps.idGen.newId(),
     userId,
-    weekStart,
+    cohortId: cohort.id,
     body
   });
+};
 
 /**
  * List reflections with cursor pagination.
@@ -54,12 +58,14 @@ export const createReflection = async (
  */
 export const listWeeklyReflections = async (
   deps: CommunityDeps,
-  weekStart: string,
+  userId: UserId,
   limit: number,
   cursor?: string
 ): Promise<{ items: Reflection[]; nextCursor?: string }> => {
+  const cohort = await getCurrentCohort({ db: deps.db }, userId);
+  if (!cohort) throw notFound('No cohort');
   const { clause, params } = cursorClause(cursor);
-  const reflections = await listReflections(deps.db, weekStart, limit, clause, params);
+  const reflections = await listReflections(deps.db, cohort.id, limit, clause, params);
   const next =
     reflections.length === limit
       ? encodeCursor({
@@ -91,12 +97,14 @@ export const removeReflection = async (
  */
 export const listMealsForWeek = async (
   deps: CommunityDeps,
-  weekStart: string,
+  userId: UserId,
   limit: number,
   cursor?: string
 ): Promise<{ items: any[]; nextCursor?: string }> => {
+  const cohort = await getCurrentCohort({ db: deps.db }, userId);
+  if (!cohort) throw notFound('No cohort');
   const { clause, params } = cursorClause(cursor);
-  const meals = await listCommunityMeals(deps.db, weekStart, limit, clause, params);
+  const meals = await listCommunityMeals(deps.db, cohort.id, limit, clause, params);
   const next =
     meals.length === limit
       ? encodeCursor({
@@ -107,6 +115,58 @@ export const listMealsForWeek = async (
   return { items: meals, nextCursor: next };
 };
 
+const pointsForWeek = async (db: any, cohortId: string, weekStart: string) => {
+  const meals = await query<{ user_id: string; cnt: string }>(
+    db,
+    `SELECT user_id, COUNT(*) as cnt
+     FROM meals
+     WHERE cohort_id = $1 AND DATE_TRUNC('week', eaten_at) = DATE_TRUNC('week', $2::date)
+     GROUP BY user_id`,
+    [cohortId, weekStart]
+  );
+  const reflections = await query<{ user_id: string; cnt: string }>(
+    db,
+    `SELECT user_id, COUNT(*) as cnt
+     FROM reflections
+     WHERE cohort_id = $1 AND DATE_TRUNC('week', created_at) = DATE_TRUNC('week', $2::date)
+     GROUP BY user_id`,
+    [cohortId, weekStart]
+  );
+  const reactions = await query<{ actor_user_id: string; cnt: string }>(
+    db,
+    `SELECT actor_user_id, COUNT(*) as cnt
+     FROM reactions
+     WHERE cohort_id = $1 AND DATE_TRUNC('week', created_at) = DATE_TRUNC('week', $2::date)
+     GROUP BY actor_user_id`,
+    [cohortId, weekStart]
+  );
+  const scores = new Map<string, number>();
+  meals.rows.forEach((r) => scores.set(r.user_id, (scores.get(r.user_id) ?? 0) + Number(r.cnt) * 10));
+  reflections.rows.forEach((r) =>
+    scores.set(r.user_id, (scores.get(r.user_id) ?? 0) + Number(r.cnt) * 5)
+  );
+  reactions.rows.forEach((r) =>
+    scores.set(r.actor_user_id, (scores.get(r.actor_user_id) ?? 0) + Number(r.cnt) * 1)
+  );
+  return scores;
+};
+
+export const leaderboardForWeek = async (
+  deps: CommunityDeps,
+  userId: UserId,
+  weekStart: string
+): Promise<{ rows: { username: string; points: number; rank: number }[]; yourRank: number }> => {
+  const cohort = await getCurrentCohort({ db: deps.db }, userId);
+  if (!cohort) throw notFound('No cohort');
+  const points = await pointsForWeek(deps.db, cohort.id, weekStart);
+  const rows = Array.from(points.entries())
+    .map(([uid, pts]) => ({ username: uid, points: pts }))
+    .sort((a, b) => b.points - a.points)
+    .map((row, idx) => ({ ...row, rank: idx + 1 }));
+  const your = rows.find((r) => r.username === userId);
+  return { rows, yourRank: your ? your.rank : 0 };
+};
+
 /**
  * Upsert a support reaction.
  * @param deps - Dependencies.
@@ -114,8 +174,12 @@ export const listMealsForWeek = async (
  */
 export const supportReaction = async (
   deps: CommunityDeps,
-  reaction: Omit<Reaction, 'createdAt'>
-): Promise<Reaction> => upsertReaction(deps.db, reaction);
+  reaction: Omit<Reaction, 'createdAt' | 'id' | 'cohortId'>
+): Promise<Reaction> => {
+  const cohort = await getCurrentCohort({ db: deps.db }, reaction.actorUserId);
+  if (!cohort) throw notFound('No cohort');
+  return upsertReaction(deps.db, { ...reaction, cohortId: cohort.id });
+};
 
 /**
  * Remove a reaction.
@@ -124,6 +188,6 @@ export const supportReaction = async (
  */
 export const removeReaction = async (
   deps: CommunityDeps,
-  reaction: Pick<Reaction, 'userId' | 'targetType' | 'targetId'>
+  reaction: Pick<Reaction, 'actorUserId' | 'targetType' | 'targetId'>
 ): Promise<void> => deleteReaction(deps.db, reaction);
 

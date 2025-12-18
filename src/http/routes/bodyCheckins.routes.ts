@@ -2,8 +2,8 @@ import { Router, RequestHandler } from 'express';
 import { RouteDeps } from './context';
 import { asyncHandler } from './helpers';
 import { requireUser } from '../middleware/auth';
-import { bodyCheckinSchema } from '../validators/bodyCheckins';
 import { fetchBodyCheckin, saveBodyCheckin } from '../../services/bodyCheckins';
+import { bodyCheckinRequest, bodyCheckinResponse } from '../contracts/v1/bodyCheckins';
 
 /**
  * Build body check-in routes.
@@ -16,14 +16,19 @@ export const bodyCheckinsRoutes = (deps: RouteDeps): Router => {
    * Upsert a body check-in.
    */
   const handleUpsert: RequestHandler = async (req, res) => {
-    const input = bodyCheckinSchema.parse(req.body);
+    const input = bodyCheckinRequest.parse(req.body);
     const checkin = await saveBodyCheckin(
       { db: deps.db, clock: deps.clock },
       req.user!.userId,
       req.params.date,
-      input.notes
+      input.energy_level
     );
-    res.json(checkin);
+    res.json(
+      bodyCheckinResponse.parse({
+        date: checkin.date,
+        energy_level: checkin.energyLevel
+      })
+    );
   };
 
   /**
@@ -35,7 +40,12 @@ export const bodyCheckinsRoutes = (deps: RouteDeps): Router => {
       req.user!.userId,
       req.params.date
     );
-    res.json(checkin);
+    res.json(
+      bodyCheckinResponse.parse({
+        date: req.params.date,
+        energy_level: checkin ? checkin.energyLevel : null
+      })
+    );
   };
 
   router.put('/body-checkins/:date', requireUser(), asyncHandler(handleUpsert));

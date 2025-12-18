@@ -1,9 +1,16 @@
 import { Router, RequestHandler } from 'express';
-import { signupSchema, loginSchema } from '../validators/auth';
 import { RouteDeps } from './context';
 import { asyncHandler } from './helpers';
 import { signup, login, logout, session } from '../../services/auth';
 import { requireUser } from '../middleware/auth';
+import {
+  signupRequest,
+  signupResponse,
+  loginRequest,
+  loginResponse,
+  logoutResponse,
+  sessionResponse
+} from '../contracts/v1/auth';
 
 /**
  * Build auth routes.
@@ -16,39 +23,41 @@ export const authRoutes = (deps: RouteDeps): Router => {
    * Handle user signup.
    */
   const handleSignup: RequestHandler = async (req, res) => {
-    const input = signupSchema.parse(req.body);
+    const input = signupRequest.parse(req.body);
     const result = await signup(
       {
         db: deps.db,
         clock: deps.clock,
         idGen: deps.idGen,
-        jwtSecret: deps.jwtSecret,
-        bcryptRounds: deps.bcryptRounds
+        jwtSecret: deps.jwtSecret
       },
       input.email,
       input.password,
-      input.name
+      input.nickname,
+      input.username,
+      input.avatar_id,
+      input.timezone
     );
-    res.status(201).json(result);
+    const validated = signupResponse.parse(result);
+    res.status(201).json(validated);
   };
 
   /**
    * Handle user login.
    */
   const handleLogin: RequestHandler = async (req, res) => {
-    const input = loginSchema.parse(req.body);
+    const input = loginRequest.parse(req.body);
     const result = await login(
       {
         db: deps.db,
         clock: deps.clock,
         idGen: deps.idGen,
-        jwtSecret: deps.jwtSecret,
-        bcryptRounds: deps.bcryptRounds
+        jwtSecret: deps.jwtSecret
       },
       input.email,
       input.password
     );
-    res.json(result);
+    res.json(loginResponse.parse(result));
   };
 
   /**
@@ -59,10 +68,9 @@ export const authRoutes = (deps: RouteDeps): Router => {
       db: deps.db,
       clock: deps.clock,
       idGen: deps.idGen,
-      jwtSecret: deps.jwtSecret,
-      bcryptRounds: deps.bcryptRounds
+      jwtSecret: deps.jwtSecret
     });
-    res.status(204).send();
+    res.json(logoutResponse.parse({ ok: true }));
   };
 
   /**
@@ -74,12 +82,11 @@ export const authRoutes = (deps: RouteDeps): Router => {
         db: deps.db,
         clock: deps.clock,
         idGen: deps.idGen,
-        jwtSecret: deps.jwtSecret,
-        bcryptRounds: deps.bcryptRounds
+        jwtSecret: deps.jwtSecret
       },
       req.user!.userId
     );
-    res.json({ user });
+    res.json(sessionResponse.parse(user));
   };
 
   router.post('/auth/signup', asyncHandler(handleSignup));

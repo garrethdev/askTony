@@ -12,6 +12,7 @@ import { bodyCheckinsRoutes } from './bodyCheckins.routes';
 import { progressRoutes } from './progress.routes';
 import { weightRoutes } from './weight.routes';
 import { communityRoutes } from './community.routes';
+import { catalogRoutes } from './catalog.routes';
 
 /**
  * Mount all route groups.
@@ -19,6 +20,7 @@ import { communityRoutes } from './community.routes';
  */
 export const registerRoutes = (deps: RouteDeps): Router => {
   const router = Router();
+  router.use(catalogRoutes(deps));
   router.use(authRoutes(deps));
   router.use(profileRoutes(deps));
   router.use(settingsRoutes(deps));

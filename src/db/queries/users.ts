@@ -1,41 +1,37 @@
 import { DbClient, query } from '../pool';
-import {
-  User,
-  UserId,
-  UserOnboarding,
-  UserProfile,
-  UserSettings
-} from '../../domain/types';
+import { User, UserId, UserOnboarding, UserProfile, UserSettings } from '../../domain/types';
 
 interface UserRow {
   id: string;
-  email: string;
-  password_hash: string;
+  email: string | null;
+  auth_provider: string;
   created_at: string;
 }
 
 interface ProfileRow {
   user_id: string;
-  name: string;
-  avatar_url: string | null;
+  nickname: string;
+  username: string;
+  avatar_id: string;
+  timezone: string;
   created_at: string;
   updated_at: string;
 }
 
 interface SettingsRow {
   user_id: string;
-  reminders_enabled: boolean;
-  reminder_time: string | null;
+  reminders_enabled_meals: boolean;
+  reminders_enabled_body_checkin: boolean;
   created_at: string;
   updated_at: string;
 }
 
 interface OnboardingRow {
   user_id: string;
-  main_reason: string | null;
-  challenges: string[];
-  eating_pattern: string | null;
-  completed: boolean;
+  main_reason_key: string;
+  main_challenges_keys: string[];
+  eating_pattern_key: string;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,64 +39,53 @@ interface OnboardingRow {
 const mapUser = (row: UserRow): User => ({
   id: row.id,
   email: row.email,
-  passwordHash: row.password_hash,
+  authProvider: row.auth_provider as User['authProvider'],
   createdAt: new Date(row.created_at)
 });
 
 const mapProfile = (row: ProfileRow): UserProfile => ({
   userId: row.user_id,
-  name: row.name,
-  avatarUrl: row.avatar_url ?? undefined,
+  nickname: row.nickname,
+  username: row.username,
+  avatarId: row.avatar_id,
+  timezone: row.timezone,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at)
 });
 
 const mapSettings = (row: SettingsRow): UserSettings => ({
   userId: row.user_id,
-  remindersEnabled: row.reminders_enabled,
-  reminderTime: row.reminder_time ?? undefined,
+  remindersEnabledMeals: row.reminders_enabled_meals,
+  remindersEnabledBodyCheckin: row.reminders_enabled_body_checkin,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at)
 });
 
 const mapOnboarding = (row: OnboardingRow): UserOnboarding => ({
   userId: row.user_id,
-  mainReason: row.main_reason ?? undefined,
-  challenges: row.challenges ?? [],
-  eatingPattern: row.eating_pattern ?? undefined,
-  completed: row.completed,
+  mainReasonKey: row.main_reason_key,
+  mainChallengesKeys: row.main_challenges_keys,
+  eatingPatternKey: row.eating_pattern_key,
+  completedAt: row.completed_at ? new Date(row.completed_at) : null,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at)
 });
 
-/**
- * Insert a new user row.
- * @param db - Database client.
- * @param user - User properties to persist.
- */
 export const insertUser = async (
   db: DbClient,
-  user: Omit<User, 'createdAt'>
+  params: { id: string; email: string; authProvider: User['authProvider'] }
 ): Promise<User> => {
   const result = await query<UserRow>(
     db,
-    `INSERT INTO users (id, email, password_hash)
+    `INSERT INTO users (id, email, auth_provider)
      VALUES ($1, $2, $3)
      RETURNING *`,
-    [user.id, user.email, user.passwordHash]
+    [params.id, params.email, params.authProvider]
   );
   return mapUser(result.rows[0]);
 };
 
-/**
- * Find a user by email.
- * @param db - Database client.
- * @param email - User email.
- */
-export const findUserByEmail = async (
-  db: DbClient,
-  email: string
-): Promise<User | null> => {
+export const findUserByEmail = async (db: DbClient, email: string): Promise<User | null> => {
   const result = await query<UserRow>(
     db,
     `SELECT * FROM users WHERE email = $1 LIMIT 1`,
@@ -109,15 +94,7 @@ export const findUserByEmail = async (
   return result.rows[0] ? mapUser(result.rows[0]) : null;
 };
 
-/**
- * Find a user by id.
- * @param db - Database client.
- * @param userId - User id.
- */
-export const findUserById = async (
-  db: DbClient,
-  userId: UserId
-): Promise<User | null> => {
+export const findUserById = async (db: DbClient, userId: UserId): Promise<User | null> => {
   const result = await query<UserRow>(
     db,
     `SELECT * FROM users WHERE id = $1 LIMIT 1`,
@@ -126,38 +103,27 @@ export const findUserById = async (
   return result.rows[0] ? mapUser(result.rows[0]) : null;
 };
 
-/**
- * Upsert a user profile row.
- * @param db - Database client.
- * @param profile - Profile payload.
- */
 export const upsertProfile = async (
   db: DbClient,
   profile: Omit<UserProfile, 'createdAt' | 'updatedAt'>
 ): Promise<UserProfile> => {
   const result = await query<ProfileRow>(
     db,
-    `INSERT INTO user_profile (user_id, name, avatar_url)
-     VALUES ($1, $2, $3)
+    `INSERT INTO user_profile (user_id, nickname, username, avatar_id, timezone)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (user_id) DO UPDATE
-       SET name = EXCLUDED.name,
-           avatar_url = EXCLUDED.avatar_url,
+       SET nickname = EXCLUDED.nickname,
+           username = EXCLUDED.username,
+           avatar_id = EXCLUDED.avatar_id,
+           timezone = EXCLUDED.timezone,
            updated_at = now()
      RETURNING *`,
-    [profile.userId, profile.name, profile.avatarUrl ?? null]
+    [profile.userId, profile.nickname, profile.username, profile.avatarId, profile.timezone]
   );
   return mapProfile(result.rows[0]);
 };
 
-/**
- * Get a user profile by user id.
- * @param db - Database client.
- * @param userId - User id.
- */
-export const getProfile = async (
-  db: DbClient,
-  userId: UserId
-): Promise<UserProfile | null> => {
+export const getProfile = async (db: DbClient, userId: UserId): Promise<UserProfile | null> => {
   const result = await query<ProfileRow>(
     db,
     `SELECT * FROM user_profile WHERE user_id = $1 LIMIT 1`,
@@ -166,11 +132,18 @@ export const getProfile = async (
   return result.rows[0] ? mapProfile(result.rows[0]) : null;
 };
 
-/**
- * Get user settings.
- * @param db - Database client.
- * @param userId - User id.
- */
+export const findProfileByUsername = async (
+  db: DbClient,
+  username: string
+): Promise<UserProfile | null> => {
+  const result = await query<ProfileRow>(
+    db,
+    `SELECT * FROM user_profile WHERE username = $1 LIMIT 1`,
+    [username]
+  );
+  return result.rows[0] ? mapProfile(result.rows[0]) : null;
+};
+
 export const getSettings = async (
   db: DbClient,
   userId: UserId
@@ -183,34 +156,28 @@ export const getSettings = async (
   return result.rows[0] ? mapSettings(result.rows[0]) : null;
 };
 
-/**
- * Upsert user settings.
- * @param db - Database client.
- * @param settings - Settings payload.
- */
 export const upsertSettings = async (
   db: DbClient,
   settings: Omit<UserSettings, 'createdAt' | 'updatedAt'>
 ): Promise<UserSettings> => {
   const result = await query<SettingsRow>(
     db,
-    `INSERT INTO user_settings (user_id, reminders_enabled, reminder_time)
+    `INSERT INTO user_settings (user_id, reminders_enabled_meals, reminders_enabled_body_checkin)
      VALUES ($1, $2, $3)
      ON CONFLICT (user_id) DO UPDATE
-       SET reminders_enabled = EXCLUDED.reminders_enabled,
-           reminder_time = EXCLUDED.reminder_time,
+       SET reminders_enabled_meals = COALESCE(EXCLUDED.reminders_enabled_meals, user_settings.reminders_enabled_meals),
+           reminders_enabled_body_checkin = COALESCE(EXCLUDED.reminders_enabled_body_checkin, user_settings.reminders_enabled_body_checkin),
            updated_at = now()
      RETURNING *`,
-    [settings.userId, settings.remindersEnabled, settings.reminderTime ?? null]
+    [
+      settings.userId,
+      settings.remindersEnabledMeals,
+      settings.remindersEnabledBodyCheckin
+    ]
   );
   return mapSettings(result.rows[0]);
 };
 
-/**
- * Fetch onboarding state for a user.
- * @param db - Database client.
- * @param userId - User id.
- */
 export const getOnboarding = async (
   db: DbClient,
   userId: UserId
@@ -223,11 +190,6 @@ export const getOnboarding = async (
   return result.rows[0] ? mapOnboarding(result.rows[0]) : null;
 };
 
-/**
- * Upsert onboarding fields for a user.
- * @param db - Database client.
- * @param patch - Partial onboarding payload.
- */
 export const upsertOnboarding = async (
   db: DbClient,
   userId: UserId,
@@ -235,21 +197,21 @@ export const upsertOnboarding = async (
 ): Promise<UserOnboarding> => {
   const result = await query<OnboardingRow>(
     db,
-    `INSERT INTO user_onboarding (user_id, main_reason, challenges, eating_pattern, completed)
-     VALUES ($1, $2, COALESCE($3, '{}'), $4, COALESCE($5, false))
+    `INSERT INTO user_onboarding (user_id, main_reason_key, main_challenges_keys, eating_pattern_key, completed_at)
+     VALUES ($1, COALESCE($2, ''), COALESCE($3, '{}'), COALESCE($4, ''), $5)
      ON CONFLICT (user_id) DO UPDATE
-       SET main_reason = COALESCE($2, user_onboarding.main_reason),
-           challenges = COALESCE($3, user_onboarding.challenges),
-           eating_pattern = COALESCE($4, user_onboarding.eating_pattern),
-           completed = COALESCE($5, user_onboarding.completed),
+       SET main_reason_key = COALESCE($2, user_onboarding.main_reason_key),
+           main_challenges_keys = COALESCE($3, user_onboarding.main_challenges_keys),
+           eating_pattern_key = COALESCE($4, user_onboarding.eating_pattern_key),
+           completed_at = COALESCE($5, user_onboarding.completed_at),
            updated_at = now()
      RETURNING *`,
     [
       userId,
-      patch.mainReason ?? null,
-      patch.challenges ?? null,
-      patch.eatingPattern ?? null,
-      patch.completed ?? null
+      patch.mainReasonKey ?? null,
+      patch.mainChallengesKeys ?? null,
+      patch.eatingPatternKey ?? null,
+      patch.completedAt ? patch.completedAt.toISOString() : null
     ]
   );
   return mapOnboarding(result.rows[0]);

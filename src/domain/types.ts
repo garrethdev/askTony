@@ -3,99 +3,113 @@ export type CohortId = string;
 export type ScanId = string;
 export type MealId = string;
 export type ReflectionId = string;
-export type WeightEntryId = string;
 
 export interface User {
   id: UserId;
-  email: string;
-  passwordHash: string;
+  email: string | null;
+  authProvider: 'email' | 'apple' | 'google';
   createdAt: Date;
 }
 
 export interface UserProfile {
   userId: UserId;
-  name: string;
-  avatarUrl?: string;
+  nickname: string;
+  username: string;
+  avatarId: string;
+  timezone: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface UserSettings {
   userId: UserId;
-  remindersEnabled: boolean;
-  reminderTime?: string;
+  remindersEnabledMeals: boolean;
+  remindersEnabledBodyCheckin: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface UserOnboarding {
   userId: UserId;
-  mainReason?: string;
-  challenges: string[];
-  eatingPattern?: string;
-  completed: boolean;
+  mainReasonKey: string;
+  mainChallengesKeys: string[];
+  eatingPatternKey: string;
+  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface Cohort {
   id: CohortId;
-  name: string;
-  startsAt: Date;
-  endsAt: Date;
+  cohortKey: string;
+  weekStart: string;
+  createdAt: Date;
 }
 
 export interface MealScan {
   id: ScanId;
   userId: UserId;
-  label: string;
+  cohortId: CohortId;
+  status: 'uploaded' | 'analyzing' | 'ready' | 'failed';
+  imageStorageKey: string;
+  metabolicScore?: number;
+  tagKeys?: string[];
+  explanationShort?: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Meal {
   id: MealId;
   userId: UserId;
-  scanId?: ScanId;
-  description: string;
-  tags: string[];
-  score: number;
-  consumedAt: Date;
+  cohortId: CohortId;
+  mealScanId?: ScanId;
+  mealName: string;
+  mealDescription?: string;
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
+  eatenAt: Date;
+  energyLevel?: 'low' | 'ok' | 'high';
+  metabolicScore: number;
+  tagKeys: string[];
+  explanationShort: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface BodyCheckin {
   userId: UserId;
   date: string;
-  notes?: string;
+  energyLevel: 'low' | 'ok' | 'high';
   createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface WeightGoal {
   userId: UserId;
-  targetWeight: number;
-  unit: 'kg' | 'lb';
+  goalWeightKg: number;
+  createdAt: Date;
   updatedAt: Date;
 }
 
 export interface WeightEntry {
-  id: WeightEntryId;
   userId: UserId;
-  weight: number;
-  unit: 'kg' | 'lb';
-  recordedAt: Date;
+  measuredAt: string;
+  weightKg: number;
+  createdAt: Date;
 }
 
 export interface Reflection {
   id: ReflectionId;
   userId: UserId;
-  weekStart: string;
+  cohortId: CohortId;
   body: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Reaction {
-  userId: UserId;
+  id: string;
+  cohortId: CohortId;
+  actorUserId: UserId;
   targetType: 'meal' | 'reflection';
   targetId: string;
   createdAt: Date;

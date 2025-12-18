@@ -2,7 +2,6 @@ import { Router, RequestHandler } from 'express';
 import { RouteDeps } from './context';
 import { asyncHandler } from './helpers';
 import { requireUser } from '../middleware/auth';
-import { mealFromScanSchema, manualMealSchema, mealQuerySchema } from '../validators/meals';
 import {
   createManualMeal,
   createMealFromScan,
@@ -10,6 +9,15 @@ import {
   listUserMeals,
   removeMeal
 } from '../../services/meals';
+import {
+  mealFromScanRequest,
+  mealManualRequest,
+  mealCreateResponse,
+  mealGetResponse,
+  mealListQuery,
+  mealListResponse,
+  mealDeleteResponse
+} from '../contracts/v1/meals';
 
 /**
  * Build meal routes.
@@ -22,28 +30,34 @@ export const mealsRoutes = (deps: RouteDeps): Router => {
    * Create a meal from scan.
    */
   const handleFromScan: RequestHandler = async (req, res) => {
-    const input = mealFromScanSchema.parse(req.body);
+    const input = mealFromScanRequest.parse(req.body);
     const meal = await createMealFromScan(
       { db: deps.db, idGen: deps.idGen, clock: deps.clock },
       req.user!.userId,
-      input.scanId,
-      input.description
+      input.scan_id,
+      input.meal_name,
+      input.meal_type,
+      input.eaten_at,
+      input.energy_level
     );
-    res.status(201).json(meal);
+    res.status(201).json(mealCreateResponse.parse({ meal_id: meal.id }));
   };
 
   /**
    * Create a manual meal.
    */
   const handleManual: RequestHandler = async (req, res) => {
-    const input = manualMealSchema.parse(req.body);
+    const input = mealManualRequest.parse(req.body);
     const meal = await createManualMeal(
       { db: deps.db, idGen: deps.idGen, clock: deps.clock },
       req.user!.userId,
-      input.description,
-      input.tags
+      input.meal_name,
+      input.meal_description,
+      input.meal_type,
+      input.eaten_at,
+      input.energy_level
     );
-    res.status(201).json(meal);
+    res.status(201).json(mealCreateResponse.parse({ meal_id: meal.id }));
   };
 
   /**
@@ -55,14 +69,23 @@ export const mealsRoutes = (deps: RouteDeps): Router => {
       req.user!.userId,
       req.params.mealId
     );
-    res.json(meal);
+    res.json(
+      mealGetResponse.parse({
+        meal_id: meal.id,
+        meal_name: meal.mealName,
+        eaten_at: meal.eatenAt.toISOString(),
+        metabolic_score: meal.metabolicScore,
+        tag_keys: meal.tagKeys,
+        explanation_short: meal.explanationShort
+      })
+    );
   };
 
   /**
    * List meals with filters.
    */
   const handleList: RequestHandler = async (req, res) => {
-    const query = mealQuerySchema.parse(req.query);
+    const query = mealListQuery.parse(req.query);
     const result = await listUserMeals(
       { db: deps.db, idGen: deps.idGen, clock: deps.clock },
       req.user!.userId,
@@ -71,7 +94,18 @@ export const mealsRoutes = (deps: RouteDeps): Router => {
       query.date,
       query.q
     );
-    res.json(result);
+    res.json(
+      mealListResponse.parse({
+        meals: result.items.map((m) => ({
+          meal_id: m.id,
+          meal_name: m.mealName,
+          eaten_at: m.eatenAt.toISOString(),
+          metabolic_score: m.metabolicScore,
+          tag_keys: m.tagKeys
+        })),
+        next_cursor: result.nextCursor ?? null
+      })
+    );
   };
 
   /**
@@ -83,7 +117,7 @@ export const mealsRoutes = (deps: RouteDeps): Router => {
       req.user!.userId,
       req.params.mealId
     );
-    res.status(204).send();
+    res.json(mealDeleteResponse.parse({ ok: true }));
   };
 
   router.post('/meals/from-scan', requireUser(), asyncHandler(handleFromScan));

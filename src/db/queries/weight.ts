@@ -1,35 +1,30 @@
 import { DbClient, query } from '../pool';
-import { UserId, WeightEntry, WeightEntryId, WeightGoal } from '../../domain/types';
+import { UserId, WeightEntry, WeightGoal } from '../../domain/types';
 
 interface WeightGoalRow {
   user_id: string;
-  target_weight: string;
-  unit: string;
+  goal_weight_kg: string;
   updated_at: string;
 }
 
 interface WeightEntryRow {
-  id: string;
   user_id: string;
-  weight: string;
-  unit: string;
-  recorded_at: string;
+  measured_at: string;
+  weight_kg: string;
   created_at: string;
 }
 
 const mapGoal = (row: WeightGoalRow): WeightGoal => ({
   userId: row.user_id,
-  targetWeight: Number(row.target_weight),
-  unit: row.unit as WeightGoal['unit'],
+  goalWeightKg: Number(row.goal_weight_kg),
+  createdAt: new Date(),
   updatedAt: new Date(row.updated_at)
 });
 
 const mapEntry = (row: WeightEntryRow): WeightEntry => ({
-  id: row.id,
   userId: row.user_id,
-  weight: Number(row.weight),
-  unit: row.unit as WeightEntry['unit'],
-  recordedAt: new Date(row.recorded_at),
+  measuredAt: row.measured_at,
+  weightKg: Number(row.weight_kg),
   createdAt: new Date(row.created_at)
 });
 
@@ -40,18 +35,17 @@ const mapEntry = (row: WeightEntryRow): WeightEntry => ({
  */
 export const upsertWeightGoal = async (
   db: DbClient,
-  goal: Omit<WeightGoal, 'updatedAt'>
+  goal: Omit<WeightGoal, 'updatedAt' | 'createdAt'>
 ): Promise<WeightGoal> => {
   const result = await query<WeightGoalRow>(
     db,
-    `INSERT INTO weight_goals (user_id, target_weight, unit)
-     VALUES ($1, $2, $3)
+    `INSERT INTO weight_goals (user_id, goal_weight_kg)
+     VALUES ($1, $2)
      ON CONFLICT (user_id) DO UPDATE
-       SET target_weight = EXCLUDED.target_weight,
-           unit = EXCLUDED.unit,
+       SET goal_weight_kg = EXCLUDED.goal_weight_kg,
            updated_at = now()
      RETURNING *`,
-    [goal.userId, goal.targetWeight, goal.unit]
+    [goal.userId, goal.goalWeightKg]
   );
   return mapGoal(result.rows[0]);
 };
@@ -80,20 +74,16 @@ export const getWeightGoal = async (
  */
 export const insertWeightEntry = async (
   db: DbClient,
-  entry: Omit<WeightEntry, 'createdAt'>
+  entry: WeightEntry
 ): Promise<WeightEntry> => {
   const result = await query<WeightEntryRow>(
     db,
-    `INSERT INTO weight_entries (id, user_id, weight, unit, recorded_at)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO weight_entries (user_id, measured_at, weight_kg)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, measured_at) DO UPDATE
+       SET weight_kg = EXCLUDED.weight_kg
      RETURNING *`,
-    [
-      entry.id,
-      entry.userId,
-      entry.weight,
-      entry.unit,
-      entry.recordedAt.toISOString().slice(0, 10)
-    ]
+    [entry.userId, entry.measuredAt, entry.weightKg]
   );
   return mapEntry(result.rows[0]);
 };
@@ -115,18 +105,18 @@ export const listWeightEntries = async (
   const params: unknown[] = [userId];
   let idx = 2;
   if (from) {
-    clauses.push(`recorded_at >= $${idx++}`);
+    clauses.push(`measured_at >= $${idx++}`);
     params.push(from);
   }
   if (to) {
-    clauses.push(`recorded_at <= $${idx++}`);
+    clauses.push(`measured_at <= $${idx++}`);
     params.push(to);
   }
   const result = await query<WeightEntryRow>(
     db,
     `SELECT * FROM weight_entries
      WHERE ${clauses.join(' AND ')}
-     ORDER BY recorded_at DESC, created_at DESC`,
+     ORDER BY measured_at DESC`,
     params
   );
   return result.rows.map(mapEntry);
@@ -140,12 +130,12 @@ export const listWeightEntries = async (
  */
 export const deleteWeightEntry = async (
   db: DbClient,
-  entryId: WeightEntryId,
-  userId: UserId
+  userId: UserId,
+  measuredAt: string
 ): Promise<void> => {
-  await query(db, `DELETE FROM weight_entries WHERE id = $1 AND user_id = $2`, [
-    entryId,
-    userId
+  await query(db, `DELETE FROM weight_entries WHERE user_id = $1 AND measured_at = $2`, [
+    userId,
+    measuredAt
   ]);
 };
 
