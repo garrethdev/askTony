@@ -14,6 +14,7 @@ interface MealRow {
   metabolic_score: string;
   tag_keys: string[];
   explanation_short: string;
+  analysis_payload: any | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +32,7 @@ const mapMeal = (row: MealRow): Meal => ({
   metabolicScore: Number(row.metabolic_score),
   tagKeys: row.tag_keys ?? [],
   explanationShort: row.explanation_short,
+  analysisPayload: row.analysis_payload ?? undefined,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at)
 });
@@ -48,9 +50,9 @@ export const insertMeal = async (
     db,
     `INSERT INTO meals (
       id, user_id, cohort_id, meal_scan_id, meal_name, meal_description, meal_type,
-      eaten_at, energy_level, metabolic_score, tag_keys, explanation_short
+      eaten_at, energy_level, metabolic_score, tag_keys, explanation_short, analysis_payload
     )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      RETURNING *`,
     [
       meal.id,
@@ -64,7 +66,8 @@ export const insertMeal = async (
       meal.energyLevel ?? null,
       meal.metabolicScore,
       meal.tagKeys,
-      meal.explanationShort
+      meal.explanationShort,
+      meal.analysisPayload ?? null
     ]
   );
   return mapMeal(result.rows[0]);

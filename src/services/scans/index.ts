@@ -5,7 +5,10 @@ import { MealScan, ScanId, UserId } from '../../domain/types';
 import { insertScan, getScan, listScans, updateScan, deleteScan } from '../../db/queries/scans';
 import { decodeCursor, encodeCursor } from '../../utils/pagination';
 import { notFound } from '../../domain/errors';
-import { scoreManualMeal } from '../scoring';
+import { analyzeScanImageV1 } from '../ai/analyzeScanImageV1';
+import { getAllowedTags } from '../ai/allowedTags';
+import { FakeLlmClient } from '../ai/FakeLlmClient';
+import { mapAnalysisToStorage } from '../ai/mappers';
 
 export interface ScanDeps {
   db: DbClient;
@@ -101,15 +104,30 @@ export const analyzeScan = async (
 ): Promise<{ scan_id: string; status: 'analyzing' }> => {
   const scan = await getScanById(deps, scanId, userId);
   await updateScan(deps.db, scanId, userId, { status: 'analyzing' });
-  // deterministic stub scoring using image_storage_key as text
-  const scored = scoreManualMeal({ meal_name: scan.imageStorageKey || 'scan' });
-  await updateScan(deps.db, scanId, userId, {
-    status: 'ready',
-    metabolic_score: scored.metabolic_score,
-    tag_keys: scored.tag_keys,
-    explanation_short: scored.explanation_short
-  });
-  return { scan_id: scanId, status: 'analyzing' };
+  try {
+    const allowedTags = await getAllowedTags(deps.db);
+    const llm = new FakeLlmClient();
+    const ai = await analyzeScanImageV1(llm, {
+      allowedTags,
+      imageUrl: scan.imageStorageKey || 'https://example.com/placeholder',
+      mealType: null,
+      energyLevel: null,
+      eatenAtLocal: null,
+      locale: 'en-US'
+    });
+    const mapped = mapAnalysisToStorage(ai);
+    await updateScan(deps.db, scanId, userId, {
+      status: 'ready',
+      metabolic_score: mapped.contractFields.metabolicScore,
+      tag_keys: mapped.contractFields.tagKeys,
+      explanation_short: mapped.contractFields.explanationShort,
+      analysis_payload: mapped.analysisPayload
+    });
+    return { scan_id: scanId, status: 'analyzing' };
+  } catch (err) {
+    await updateScan(deps.db, scanId, userId, { status: 'failed' });
+    throw err;
+  }
 };
 
 export const removeScan = async (

@@ -10,6 +10,7 @@ interface ScanRow {
   metabolic_score: string | null;
   tag_keys: string[] | null;
   explanation_short: string | null;
+  analysis_payload: any | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +24,7 @@ const mapScan = (row: ScanRow): MealScan => ({
   metabolicScore: row.metabolic_score ? Number(row.metabolic_score) : undefined,
   tagKeys: row.tag_keys ?? undefined,
   explanationShort: row.explanation_short ?? undefined,
+  analysisPayload: row.analysis_payload ?? undefined,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at)
 });
@@ -33,10 +35,10 @@ export const insertScan = async (
 ): Promise<MealScan> => {
   const result = await query<ScanRow>(
     db,
-    `INSERT INTO meal_scans (id, user_id, cohort_id, status, image_storage_key)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO meal_scans (id, user_id, cohort_id, status, image_storage_key, analysis_payload)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [scan.id, scan.userId, scan.cohortId, scan.status, scan.imageStorageKey]
+    [scan.id, scan.userId, scan.cohortId, scan.status, scan.imageStorageKey, scan.analysisPayload ?? null]
   );
   return mapScan(result.rows[0]);
 };
@@ -51,6 +53,7 @@ export const updateScan = async (
     metabolic_score: number;
     tag_keys: string[];
     explanation_short: string;
+    analysis_payload: any;
   }>
 ): Promise<MealScan | null> => {
   const fields: string[] = [];
@@ -65,6 +68,7 @@ export const updateScan = async (
   if (patch.metabolic_score !== undefined) add('metabolic_score', patch.metabolic_score);
   if (patch.tag_keys !== undefined) add('tag_keys', patch.tag_keys);
   if (patch.explanation_short !== undefined) add('explanation_short', patch.explanation_short);
+  if (patch.analysis_payload !== undefined) add('analysis_payload', patch.analysis_payload);
   add('updated_at', new Date().toISOString());
   values.push(scanId, userId);
   if (!fields.length) return getScan(db, scanId, userId);

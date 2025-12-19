@@ -55,6 +55,7 @@ export interface MealScan {
   metabolicScore?: number;
   tagKeys?: string[];
   explanationShort?: string;
+  analysisPayload?: AnalysisPayload;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -72,8 +73,17 @@ export interface Meal {
   metabolicScore: number;
   tagKeys: string[];
   explanationShort: string;
+  analysisPayload?: AnalysisPayload;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface AnalysisPayload {
+  headline: string;
+  getsRight: string[];
+  thingsToWatch: string[];
+  confidence: number;
+  modelVersion: string;
 }
 
 export interface BodyCheckin {

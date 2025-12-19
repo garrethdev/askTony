@@ -5,9 +5,12 @@ import { Meal, MealId, UserId, ScanId } from '../../domain/types';
 import { insertMeal, getMeal as fetchMeal, listMeals, deleteMeal } from '../../db/queries/meals';
 import { getScan } from '../../db/queries/scans';
 import { badRequest, notFound } from '../../domain/errors';
-import { scoreManualMeal } from '../scoring';
 import { decodeCursor, encodeCursor } from '../../utils/pagination';
 import { getCurrentCohort } from '../cohorts';
+import { analyzeManualMealV1 } from '../ai/analyzeManualMealV1';
+import { getAllowedTags } from '../ai/allowedTags';
+import { FakeLlmClient } from '../ai/FakeLlmClient';
+import { mapAnalysisToStorage } from '../ai/mappers';
 
 export interface MealDeps {
   db: DbClient;
@@ -83,13 +86,17 @@ export const createManualMeal = async (
 ): Promise<Meal> => {
   const cohort = await getCurrentCohort({ db: deps.db }, userId);
   if (!cohort) throw badRequest('No cohort');
-  const scored = scoreManualMeal({
-    meal_name: mealName,
-    meal_description: mealDescription,
-    meal_type: mealType,
-    energy_level: energyLevel,
-    eaten_at: eatenAt
+  const allowedTags = await getAllowedTags(deps.db);
+  const llm = new FakeLlmClient();
+  const analysis = await analyzeManualMealV1(llm, {
+    allowedTags,
+    mealName,
+    mealDescription,
+    mealType: mealType ?? null,
+    energyLevel: energyLevel ?? null,
+    locale: 'en-US'
   });
+  const mapped = mapAnalysisToStorage(analysis);
   return insertMeal(deps.db, {
     id: deps.idGen.newId(),
     userId,
@@ -100,9 +107,10 @@ export const createManualMeal = async (
     mealType,
     eatenAt: eatenAt ? new Date(eatenAt) : deps.clock.now(),
     energyLevel,
-    metabolicScore: scored.metabolic_score,
-    tagKeys: scored.tag_keys,
-    explanationShort: scored.explanation_short
+    metabolicScore: mapped.contractFields.metabolicScore,
+    tagKeys: mapped.contractFields.tagKeys,
+    explanationShort: mapped.contractFields.explanationShort,
+    analysisPayload: mapped.analysisPayload
   });
 };
 
