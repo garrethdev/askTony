@@ -20,7 +20,8 @@ import {
 
 /**
  * Build weight routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for weight endpoints.
  */
 export const weightRoutes = (deps: RouteDeps): Router => {
   const router = Router();

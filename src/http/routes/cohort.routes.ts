@@ -12,7 +12,8 @@ import {
 
 /**
  * Build cohort routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for cohort endpoints.
  */
 export const cohortRoutes = (deps: RouteDeps): Router => {
   const router = Router();

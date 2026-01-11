@@ -17,7 +17,8 @@ import { fetchProfile } from '../../services/profile';
 
 /**
  * Build onboarding routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for onboarding endpoints.
  */
 export const onboardingRoutes = (deps: RouteDeps): Router => {
   const router = Router();

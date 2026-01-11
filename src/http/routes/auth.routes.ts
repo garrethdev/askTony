@@ -14,7 +14,8 @@ import {
 
 /**
  * Build auth routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router with auth endpoints.
  */
 export const authRoutes = (deps: RouteDeps): Router => {
   const router = Router();

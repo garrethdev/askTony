@@ -15,8 +15,9 @@ import { communityRoutes } from './community.routes';
 import { catalogRoutes } from './catalog.routes';
 
 /**
- * Mount all route groups.
- * @param deps - Route dependencies.
+ * Mount all route groups under the API prefix.
+ * @param deps Route dependencies.
+ * @returns Express router with all modules mounted.
  */
 export const registerRoutes = (deps: RouteDeps): Router => {
   const router = Router();

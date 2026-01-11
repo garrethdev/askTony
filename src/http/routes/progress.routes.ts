@@ -18,7 +18,8 @@ const rangeToDays = (range: string): number => {
 
 /**
  * Build progress routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for progress endpoints.
  */
 export const progressRoutes = (deps: RouteDeps): Router => {
   const router = Router();

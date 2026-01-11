@@ -8,7 +8,8 @@ import { profileResponse, profileUpdateRequest } from '../contracts/v1/profile';
 
 /**
  * Build profile routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for profile endpoints.
  */
 export const profileRoutes = (deps: RouteDeps): Router => {
   const router = Router();

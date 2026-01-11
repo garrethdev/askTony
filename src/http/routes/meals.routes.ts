@@ -21,7 +21,8 @@ import {
 
 /**
  * Build meal routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for meal endpoints.
  */
 export const mealsRoutes = (deps: RouteDeps): Router => {
   const router = Router();

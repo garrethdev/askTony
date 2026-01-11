@@ -7,7 +7,8 @@ import { bodyCheckinRequest, bodyCheckinResponse } from '../contracts/v1/bodyChe
 
 /**
  * Build body check-in routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for body check-in endpoints.
  */
 export const bodyCheckinsRoutes = (deps: RouteDeps): Router => {
   const router = Router();

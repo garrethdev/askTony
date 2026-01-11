@@ -25,7 +25,8 @@ import { getCurrentCohort } from '../../services/cohorts';
 
 /**
  * Build meal scan routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for scan endpoints.
  */
 export const scansRoutes = (deps: RouteDeps): Router => {
   const router = Router();

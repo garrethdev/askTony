@@ -14,7 +14,8 @@ import { getCurrentCohort } from '../../services/cohorts';
 
 /**
  * Build scoring routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for scoring endpoints.
  */
 export const scoringRoutes = (deps: RouteDeps): Router => {
   const router = Router();

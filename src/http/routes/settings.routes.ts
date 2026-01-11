@@ -7,7 +7,8 @@ import { settingsResponse, settingsUpdateRequest } from '../contracts/v1/setting
 
 /**
  * Build settings routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for settings endpoints.
  */
 export const settingsRoutes = (deps: RouteDeps): Router => {
   const router = Router();

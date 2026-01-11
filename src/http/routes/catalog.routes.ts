@@ -12,7 +12,8 @@ const ONBOARDING_OPTIONS = {
 
 /**
  * Catalog routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for catalog endpoints.
  */
 export const catalogRoutes = (deps: RouteDeps): Router => {
   const router = Router();

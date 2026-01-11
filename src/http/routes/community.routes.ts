@@ -31,7 +31,8 @@ import { leaderboardForWeek } from '../../services/community';
 
 /**
  * Build community routes.
- * @param deps - Route dependencies.
+ * @param deps Route dependencies.
+ * @returns Router for community endpoints.
  */
 export const communityRoutes = (deps: RouteDeps): Router => {
   const router = Router();
